@@ -146,6 +146,12 @@ async def crawl(base_url: str, max_depth: int, output_file: str, format: str, ou
 
     try:
         async with httpx.AsyncClient() as client:
+
+            with open(output_file_path, "w") as file:
+                if format == "json":
+                    file.write('{"urls": [')
+                    first_entry = True
+
             while not queue.empty():
                 url, depth = await queue.get()
                 if url in visited_urls or depth >= max_depth:
@@ -170,6 +176,10 @@ async def crawl(base_url: str, max_depth: int, output_file: str, format: str, ou
                 # Write the crawled URL to the output file based on the specified format
                 if format == "json":
                     with open(output_file_path, "a") as file:
+                        if not first_entry:
+                            file.write(",")
+                        else:
+                            first_entry = False
                         json.dump({"url": url}, file)
                         file.write("\n")
                 elif format == "csv":
@@ -179,7 +189,9 @@ async def crawl(base_url: str, max_depth: int, output_file: str, format: str, ou
                 else:  # Default to TXT format
                     with open(output_file_path, "a") as file:
                         file.write(url + "\n")
-
+            if format == "json":
+                with open(output_file_path, "a") as file:
+                    file.write("]}")
         return output_filename
     except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as e:
         if not quiet:
