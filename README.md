@@ -48,7 +48,7 @@ python crawler.py <domain> [--format <output_format>] [--output-dir <output_dir>
 
 ### Arguments:
 
-<domain>: The domain name to crawl (required).
+<domain>:The domain name to crawl (required).
 
 ### Options:
 
@@ -70,9 +70,9 @@ The crawled URLs will be saved to a file in the specified output directory. The 
 
 Example output file names:
 
-JSON: example.com_20230520_123456.json
-CSV: example.com_20230520_123456.csv
-TXT: example.com_20230520_123456.txt
+- JSON: example.com_20230520_123456.json
+- CSV: example.com_20230520_123456.csv
+- TXT: example.com_20230520_123456.txt
 
 ### Logging
 The web crawler logs errors and status messages using the Python logging module. The log level is set to DEBUG by default, which can be adjusted in the code if needed.
