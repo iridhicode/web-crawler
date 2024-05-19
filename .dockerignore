@@ -1,0 +1,15 @@
+# Ignore version control files
+.git
+.gitignore
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+
+# Ignore output directory
+output/
+myOutput

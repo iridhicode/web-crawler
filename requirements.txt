@@ -1,0 +1,6 @@
+aiofiles
+aiosqlite
+beautifulsoup4
+httpx
+typer
+logging

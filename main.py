@@ -26,8 +26,11 @@ from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 from pathlib import Path
 from datetime import datetime
+import logging
 
 app = typer.Typer()
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 async def fetch_html(url: str, client: httpx.AsyncClient, user_agent: str = None, delay: float = 0) -> str:
 
@@ -39,22 +42,25 @@ async def fetch_html(url: str, client: httpx.AsyncClient, user_agent: str = None
             client (httpx.AsyncClient): The HTTP client to use for making requests.
             user_agent (str, optional): The User-Agent header to send with the request. Defaults to None.
             delay (float, optional): The delay in seconds before making the request. Defaults to 0.
-
         Returns:
             str: The HTML content of the URL.
+        Raises:
+        httpx.HTTPStatusError: If the response status code indicates an HTTP error.
+        httpx.RequestError: If an error occurs while making the request.
     """
 
     try:
         await asyncio.sleep(delay)
         headers = {"User-Agent": user_agent} if user_agent else None
+        
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         return response.text
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 403:
-            print(f"Access denied for URL: {url}. The website does not allow crawlers.")
+            logger.error(f"Access denied for URL: {url}. The website does not allow crawlers.")
         else:
-            print(f"HTTP error occurred for URL: {url}. Status code: {e.response.status_code}")
+            logger.error(f"HTTP error occurred for URL: {url}. Status code: {e.response.status_code}")
     except httpx.RequestError as e:
         print(f"An error occurred while requesting URL: {url}. Error: {str(e)}")
     return ""
@@ -117,6 +123,13 @@ async def crawl(base_url: str, max_depth: int, output_file: str, format: str, ou
         output_dir (str): The output directory to store the output file.
         user_agent (str, optional): The User-Agent header to send with the requests. Defaults to None.
         delay (float, optional): The delay in seconds between requests. Defaults to 0.
+    
+    Returns:
+        str: The name of the output file if crawling is successful, None otherwise.
+    
+    Raises:
+        ValueError: If an error occurs during the crawling process.
+
     """
     visited_urls = set()
     queue = asyncio.Queue()
@@ -131,42 +144,47 @@ async def crawl(base_url: str, max_depth: int, output_file: str, format: str, ou
     output_filename = f"{output_file.split('.')[0]}_{timestamp}.{format}"
     output_file_path = output_path / output_filename
 
-    async with httpx.AsyncClient() as client:
-        while not queue.empty():
-            url, depth = await queue.get()
-            if url in visited_urls or depth >= max_depth:
-                continue
-            visited_urls.add(url)
-            if not quiet:
-                print(f"Crawling: {url}")
+    try:
+        async with httpx.AsyncClient() as client:
+            while not queue.empty():
+                url, depth = await queue.get()
+                if url in visited_urls or depth >= max_depth:
+                    continue
+                visited_urls.add(url)
+                if not quiet:
+                    logger.info(f"Crawling: {url}")
 
-            # Check if the URL is allowed to be crawled
-            parsed_url = urlparse(url)
-            robots_txt_url = f"{parsed_url.scheme}://{parsed_url.netloc}/robots.txt"
-            if not await is_crawlable(url, robots_txt_url, client):
-                print(f"Skipping URL: {url}. Not allowed by robots.txt.")
-                continue
+                # Check if the URL is allowed to be crawled
+                parsed_url = urlparse(url)
+                robots_txt_url = f"{parsed_url.scheme}://{parsed_url.netloc}/robots.txt"
+                if not await is_crawlable(url, robots_txt_url, client):
+                #    logger.warning(f"Skipping URL: {url}. Not allowed by robots.txt.")
+                    continue
 
-            html = await fetch_html(url, client, user_agent, delay)
-            if html:
-                links = await parse_links(html, base_url)
-                for link in links:
-                    await queue.put((link, depth + 1))
+                html = await fetch_html(url, client, user_agent, delay)
+                if html:
+                    links = await parse_links(html, base_url)
+                    for link in links:
+                        await queue.put((link, depth + 1))
 
-            # Write the crawled URL to the output file based on the specified format
-            if format == "json":
-                with open(output_file_path, "a") as file:
-                    json.dump({"url": url}, file)
-                    file.write("\n")
-            elif format == "csv":
-                with open(output_file_path, "a", newline="") as file:
-                    writer = csv.writer(file)
-                    writer.writerow([url])
-            else:  # Default to TXT format
-                with open(output_file_path, "a") as file:
-                    file.write(url + "\n")
+                # Write the crawled URL to the output file based on the specified format
+                if format == "json":
+                    with open(output_file_path, "a") as file:
+                        json.dump({"url": url}, file)
+                        file.write("\n")
+                elif format == "csv":
+                    with open(output_file_path, "a", newline="") as file:
+                        writer = csv.writer(file)
+                        writer.writerow([url])
+                else:  # Default to TXT format
+                    with open(output_file_path, "a") as file:
+                        file.write(url + "\n")
 
-    return output_filename
+        return output_filename
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as e:
+        if not quiet:
+            logger.error("An error occurred during crawling")
+        return None
 
 
 @app.command()
@@ -177,7 +195,7 @@ def start_crawl(
     output_dir= typer.Option("output",help = "Output directory , where to save the file"),
     max_depth: int = typer.Option(2, help="Max depth for crawling"),
     delay: float = typer.Option(0, help="Delay between requests (in seconds)"),
-    quiet: bool = typer.Option(False, help="Enable quiet mode to suppress printing of parsed URLs")
+    quiet: bool = typer.Option(False, help="Enable quiet mode to suppress printing of parsed URLs"),
 ):
     
     """
@@ -193,17 +211,21 @@ def start_crawl(
         quiet (bool, optional): Enable quiet mode to suppress printing of parsed URLs. Defaults to False.
     """
     
-    if (domain.startswith("https://")):
-            base_url = domain
-            output_file_name = domain.split("/")
-            output_filename = asyncio.run(crawl(base_url, max_depth=max_depth, user_agent=user_agent, delay=delay, output_file= output_file_name[2] , output_dir=output_dir, format=format,quiet=quiet))
+    if domain.startswith("https://"):
+        base_url = domain
     else:
         base_url = f"https://{domain}"
-        output_file_name = domain.split("/")
-        output_filename = asyncio.run(crawl(base_url, max_depth=max_depth, user_agent=user_agent, delay=delay, output_file= output_file_name[0] , output_dir=output_dir, format=format,quiet=quiet))
-    print(f"Crawling completed. Results saved to {output_dir}/{output_filename}")
-
+    
+    # Extract the domain name from the base URL
+    parsed_url = urlparse(base_url)
+    output_file_name = parsed_url.netloc
+    
+    output_filename = asyncio.run(crawl(base_url, max_depth=max_depth, user_agent=user_agent, delay=delay, output_file=output_file_name, output_dir=output_dir, format=format, quiet=quiet))
+    
+    if output_filename:
+        logger.info(f"Crawling completed. Results saved to {output_dir}/{output_filename}")
+    else:
+        logger.error("Crawling failed. No output file was created.")
+        raise typer.Exit(1)
 if __name__ == "__main__":
     app()
-
-
