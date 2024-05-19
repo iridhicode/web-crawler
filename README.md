@@ -48,15 +48,15 @@ python crawler.py <domain> [--format <output_format>] [--output-dir <output_dir>
 
 ### Arguments:
 
-<domain>:The domain name to crawl (required).
+domain: The domain name to crawl (required).
 
 ### Options:
 
---format <output_format>: Output file format. Supported values: json, csv, txt (default: txt).
---output-dir <output_dir>: Output directory to store the output file (default: output).
---user-agent <user_agent>: User-Agent header to send with the requests (default: None).
---delay <delay>: Delay between requests in seconds (default: 0).
---quiet <quiet>: Enable quiet mode to suppress printing of parsed URLs (default: False).
+- --format <output_format>: Output file format. Supported values: json, csv, txt (default: txt).
+- --output-dir <output_dir>: Output directory to store the output file (default: output).
+- --user-agent <user_agent>: User-Agent header to send with the requests (default: None).
+- --delay <delay>: Delay between requests in seconds (default: 0).
+- --quiet <quiet>: Enable quiet mode to suppress printing of parsed URLs (default: False).
 
 ### Example usage:
 
